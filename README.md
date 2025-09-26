@@ -246,3 +246,232 @@ Visual differences between the two netlists
 Use the editor screenshots to show the difference. Paste both screenshots into the repo and I will add concise captions describing what changed and why the `-noattr` output is useful.
 
 </details>
+
+Section 2 delivered below. Clear. Precise. Ready to paste into README.
+
+# Section 2 — Timing libraries, `.lib` anatomy and cell comparison
+
+### Quick start
+
+Open the library file:
+
+```bash
+gvim ../lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+```
+
+Extract a specific cell block:
+
+```bash
+# example: show the and2_4 block
+sed -n '/cell ("sky130_fd_sc_hd__and2_4")/,/}/p' ../lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+```
+
+---
+<img width="289" height="321" alt="Image" src="https://github.com/user-attachments/assets/e40b4ec7-268f-46aa-880b-1fabb2d31a2e" />
+
+### Library name parsed
+
+`sky130_fd_sc_hd__tt_025C_1v80`
+
+* `sky130` = SkyWater 130 nm process node.
+* `fd` = foundry distribution / foundry-provided.
+* `sc` = standard-cell library.
+* `hd` = high-density cell family (area-optimized cell height/pitch).
+* `tt` = typical PVT corner. Alternatives: `ff` (fast), `ss` (slow).
+* `025C` = temperature (25 °C). Other corners: `-40C`, `125C`.
+* `1v80` = nominal voltage 1.8 V.
+
+---
+
+### What a `.lib` contains (essentials)
+
+* **Cells**: name, pins, `area`, `cell_footprint`.
+* **Timing data**: `timing` entries, delay tables, output transition vs load (`table_lookup` or other model).
+* **Power data**: `leakage_power` (per input condition), `cell_leakage_power`.
+* **Units & operating conditions**: `time_unit`, `voltage_unit`, `current_unit`, `capacitive_load_unit`, `operating_conditions { voltage process temperature }`.
+* **Delay model**: often `table_lookup` for CMOS libs (delay is read from characterization tables).
+
+Why it matters: synthesis maps RTL operators to the cells described here. Delay and power numbers are valid only at the listed PVT corner.
+
+---
+
+### PVT (Process / Voltage / Temperature)
+
+* **Process**: fabrication speed variation (fast/typical/slow). Affects transistor drive.
+* **Voltage**: supply scaling directly affects delay and power.
+* **Temperature**: affects carrier mobility and leakage. Higher T -> higher delay and leakage in general.
+
+---
+
+### Practical cell comparison (AND2 flavours)
+<img width="227" height="194" alt="Image" src="https://github.com/user-attachments/assets/74f757ac-dd71-48e7-bfca-554ca0e1364c" />
+<img width="220" height="189" alt="Image" src="https://github.com/user-attachments/assets/31550251-980f-4786-9b6b-0d6aa24b9387" />
+<img width="232" height="191" alt="Image" src="https://github.com/user-attachments/assets/731eb220-a554-452e-9871-977401ddea97" />
+Data taken from your `.lib` excerpts.
+
+| Cell   |   Area | cell_leakage_power | leakage/area (approx) |
+| ------ | -----: | -----------------: | --------------------: |
+| and2_0 | 6.2560 |        0.001921380 |              0.000307 |
+| and2_1 | 6.2560 |        0.002665008 |              0.000426 |
+| and2_2 | 7.5072 |        0.003369228 |              0.000449 |
+| and2_4 | 8.7584 |        0.004546817 |              0.000519 |
+
+Observations
+
+* Area rises across flavours and absolute leakage rises accordingly.
+* Leakage density (leakage/area) also increases with bigger flavours here.
+* `and2_0` vs `and2_1`: same area but different leakage. That implies internal transistor sizing or Vth/topology differences even within the same footprint. Do not assume identical timing from identical footprint alone.
+
+Conclusion
+
+* Larger/higher-index flavours will generally have lower delay and higher area/power. Use them for timing-critical nets.
+* Smaller flavours save area and power and may help hold timing (or at least avoid making short paths even faster).
+* Always verify **timing tables** (`timing` / `cell` block) for real delay numbers versus load and input transition. Leakage alone is not a timing indicator.
+
+---
+
+### How to inspect timing entries (commands)
+
+Show timing table for a cell:
+
+```bash
+sed -n '/cell ("sky130_fd_sc_hd__and2_4")/,/timing/p' ../lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+sed -n '/timing/,/}/p'  ../lib/sky130_fd_sc_hd__tt_025C_1v80.lib | sed -n '1,200p'
+```
+
+Search all `area` and `cell_leakage_power` lines quickly:
+
+```bash
+grep -E 'cell \(|area :|cell_leakage_power' ../lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+```
+
+
+<details>
+<summary>Section 2 — Hierarchical vs Flat Synthesis (Yosys)</summary>
+
+### Example RTL (multiple_modules.v)
+
+```verilog
+module sub_module2 (input a, input b, output y);
+  assign y = a | b;
+endmodule
+
+module sub_module1 (input a, input b, output y);
+  assign y = a & b;
+endmodule
+
+module multiple_modules (input a, input b, input c, output y);
+  wire net1;
+  sub_module1 u1(.a(a), .b(b), .y(net1));  // net1 = a & b
+  sub_module2 u2(.a(net1), .b(c), .y(y));  // y = net1 | c => y = (a & b) | c
+endmodule
+```
+
+### Quick block diagram
+
+```
+   a ----\        /-- net1 --\
+           AND(u1)           OR(u2) --> y
+   b ----/        \--       /        \
+                        c --/          
+```
+
+* u1 implements `net1 = a & b`.
+* u2 implements `y = net1 | c`.
+
+---
+
+## Yosys synthesis steps (hierarchical)
+
+Start Yosys and run:
+
+```text
+read_liberty -lib ../lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+read_verilog multiple_modules.v
+synth -top multiple_modules
+abc -liberty ../lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+show multiple_modules
+write_verilog -noattr multiple_modules_hier.v
+```
+<img width="302" height="320" alt="Image" src="https://github.com/user-attachments/assets/1c38b8cb-4d28-4d65-9f91-002888d0cec6" />
+
+Open the generated netlist:
+
+```bash
+gvim multiple_modules_hier.v
+```
+<img width="431" height="541" alt="Image" src="https://github.com/user-attachments/assets/33ccf144-8b8e-49cb-80be-5a743481ef02" />
+
+**Outcome:** hierarchy preserved in the netlist. Submodules appear as instantiated modules or as named cells depending on mapping.
+
+### Why an OR became NAND + inverters in the netlist
+
+Synthesis used De Morgan equivalence to implement `a | b` as `~( ~a & ~b )`. The resulting mapped implementation is a NAND with input inverters.
+
+**Why prefer NAND+inverters over direct OR/NOR?**
+
+* CMOS NAND pull-up network uses parallel PMOS and series NMOS. CMOS NOR uses series PMOS in the pull-up.
+* PMOS transistors have lower mobility. Series PMOS stacking hurts pull-up strength and increases delay.
+* Implementing OR via NAND+inverters avoids stacked PMOS in the pull-up path. That often reduces area or delay when using standard-cell libraries.
+* The library may lack an optimized OR cell but has strong NAND/inverter cells. `abc` chooses the cheapest/fastest mapping based on availability and timing.
+
+Related concept: **logical effort**. To reduce delay you can increase transistor width. Stacked devices change logical effort and required sizing. Synthesis trades sizing, cell choice and mapping to meet constraints.
+
+---
+
+## Flat synthesis
+
+In Yosys run a flatten pass (after generic synth or before `abc`):
+
+```text
+flatten
+write_verilog -noattr multiple_modules_flat.v
+```
+
+Open the flat netlist:
+
+```bash
+gvim multiple_modules_flat.v
+```
+<img width="446" height="458" alt="Image" src="https://github.com/user-attachments/assets/f866e854-8823-4e36-adb5-65fb3a2fef1c" />
+
+**Outcome:** modules are flattened. Submodule boundaries removed. The netlist will show primitive gates (AND/OR) directly under `multiple_modules`.
+
+**Difference:**
+
+* **Hierarchical**: keeps module instantiations. Easier incremental flows and protects boundaries. May limit cross-module optimizations.
+* **Flat**: exposes everything to global optimization. Can yield better area/timing at the cost of runtime and loss of module identity.
+
+---
+
+## Module-level synthesis (`synth -top <module>`)
+
+```text
+synth -top sub_module1
+write_verilog -noattr sub_module1_netlist.v
+```
+
+**Why use it?**
+
+* If a top-level module contains many identical instances (e.g., `n` adders), synthesize one instance then replicate its mapped netlist. This saves runtime and ensures consistent mapping.
+* Useful for divide-and-conquer on very large designs. Synthesize critical blocks independently, optimize them, then integrate at top-level.
+
+**When to prefer module-level synthesis**
+
+1. Multiple identical instantiations of a component.
+2. Need to iterate on a block without resynthesizing the whole chip.
+3. Floorplanning or P&R constraints that require fixed, repeatable block shapes and hierarchies.
+
+**Flow**
+
+1. Synthesize modules hierarchically by default.
+2. Identify timing-critical blocks and re-synthesize them flat or individually (module-level) for aggressive optimization.
+3. Run `abc` with the target Liberty and perform STA on the netlist to validate timing and hold.
+4. If area or timing still unsatisfactory, selectively flatten problematic modules and re-run mapping.
+
+---
+
+</details>
+
+
+

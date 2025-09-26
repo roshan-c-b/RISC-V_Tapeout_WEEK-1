@@ -247,9 +247,10 @@ Use the editor screenshots to show the difference. Paste both screenshots into t
 
 </details>
 
+<details>
 <summary>Section 2 — Timing libs, hierarchical vs Flat synthesis and efficient flop coding styles</summary>
 
-#  Timing libraries, `.lib` anatomy and cell comparison
+# Timing libraries, `.lib` anatomy and cell comparison
 
 ### Quick start
 

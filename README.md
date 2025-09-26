@@ -247,9 +247,9 @@ Use the editor screenshots to show the difference. Paste both screenshots into t
 
 </details>
 
-Section 2 delivered below. Clear. Precise. Ready to paste into README.
+<summary>Section 2 — Timing libs, hierarchical vs Flat synthesis and efficient flop coding styles</summary>
 
-# Section 2 — Timing libraries, `.lib` anatomy and cell comparison
+#  Timing libraries, `.lib` anatomy and cell comparison
 
 ### Quick start
 
@@ -346,8 +346,7 @@ grep -E 'cell \(|area :|cell_leakage_power' ../lib/sky130_fd_sc_hd__tt_025C_1v80
 ```
 
 
-<details>
-<summary>Section 2 — Hierarchical vs Flat Synthesis (Yosys)</summary>
+# Hierarchical vs Flat Synthesis 
 
 ### Example RTL (multiple_modules.v)
 

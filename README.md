@@ -1,6 +1,5 @@
 # RISC-V_Tapeout_WEEK-1
 
-
 <details>
 <summary>Section 1 — Verilog rtl design and synthesis</summary>
 
@@ -27,7 +26,9 @@ Design + Testbench  --> iverilog (compile) --> ./a.out (run) --> tb_good_mux.vcd
 
 ![iverilog simulation flow image](/mnt/data/95d03aa0-8262-4e18-bdbf-36d794e7a706.png)
 
-### Setup / Instructions
+---
+
+## Setup / Instructions
 
 1. Open a terminal and choose or create the directory where you want the repository.
 
@@ -68,7 +69,6 @@ iverilog good_mux.v tb_good_mux.v
 gtkwave tb_good_mux.vcd
 ```
 
-**Do not modify these commands.** They are the canonical steps used in the examples.
 
 ### Files to inspect
 
@@ -83,6 +83,8 @@ When you open these files look for the following elements:
 * `module` declaration and input/output ports in `good_mux.v`.
 * `initial` and `always` blocks in `tb_good_mux.v` that generate clocks, drive inputs, and call `$dumpfile` / `$dumpvars`.
 
+<img width="661" height="646" alt="Image" src="https://github.com/user-attachments/assets/53e89da0-fa5a-43b5-91cb-8994ba96d3f7" />
+
 ### Basic MUX working logic (reference)
 
 This explains the operation used by the example mux. The example uses two select lines `sel1` and `sel0` to pick one of four inputs.
@@ -94,31 +96,12 @@ This explains the operation used by the example mux. The example uses two select
 | 1    | 0    | input2                  |
 | 1    | 1    | input3                  |
 
-Verilog behavioural equivalent (conceptual):
-
-```verilog
-always @(*) begin
-  case ({sel1, sel0})
-    2'b00: out = in0;
-    2'b01: out = in1;
-    2'b10: out = in2;
-    2'b11: out = in3;
-  endcase
-end
-```
 
 The testbench toggles `sel1` and `sel0` and drives `in0..in3` to verify that `out` follows the selected input. The waveform viewer shows `sel1`, `sel0`, inputs and output transitions.
 
-### Final notes
+---
 
-* Follow the exact commands shown when compiling and running the examples.
-* If a VCD does not appear after running `./a.out`, open the testbench and confirm `$dumpfile("tb_good_mux.vcd")` and `$dumpvars` are present.
-* This README is section-controlled. You will add sections 2-5 later. For now everything above is inside Section 1.
-
-</details>
-
-<details>
-<summary>Section 2 — Introduction to Yosys and Logic Synthesis</summary>
+## Yosys and Logic Synthesis (integrated)
 
 ### What is RTL design?
 
@@ -194,6 +177,9 @@ read_liberty -lib ../lib/sky130_fd_sc_hd__tt_025C_1v80.lib
 read_verilog good_mux.v
 # you should see: "successfully finished verilog frontend"
 
+# run generic synthesis and set the top module
+synth -top good_mux
+
 # run ABC to map RTL to library gates
 abc -liberty ../lib/sky130_fd_sc_hd__tt_025C_1v80.lib
 
@@ -203,6 +189,13 @@ show
 # write out the gate-level netlist
 write_verilog good_mux_netlist.v
 ```
+Notes on synth -top good_mux and ordering
+
+*`synth` runs Yosys's generic synthesis passes. It identifies registers and combinational logic, performs constant propagation, flattens where appropriate, and prepares a generic gate-level netlist.
+*`top good_mux` sets the top-level module explicitly. Use it when the RTL has multiple modules and you want to synthesize a specific top.
+*Run `synth` before `abc`. `synth` produces the internal representation `abc` expects. 
+
+<img width="303" height="325" alt="Image" src="https://github.com/user-attachments/assets/f6774d5b-6b3d-4fa7-be57-ed27589e7c22" />
 
 Notes on `abc` step
 
@@ -210,14 +203,7 @@ Notes on `abc` step
 * The synthesized netlist will use cells available in the provided library.
 * Example inferred output from `abc` after synthesizing `good_mux`:
 
-```
-ABC RESULTS:   sky130_fd_sc_hd__mux2_1 cells:        1
-ABC RESULTS:        internal signals:        0
-ABC RESULTS:           input signals:        3
-ABC RESULTS:          output signals:        1
-```
-
-After `show` you will get a graphical depiction of the netlist. Paste the image into the repo or into this README and I will add a short write-up for that image.
+<img width="262" height="76" alt="Image" src="https://github.com/user-attachments/assets/51ce5e27-1782-4e63-a33e-465b377f033a" />
 
 ### Inspecting and writing netlists
 
@@ -233,12 +219,15 @@ gvim good_mux_netlist.v
 
 `write_verilog good_mux_netlist.v` writes a gate-level Verilog netlist. That netlist includes Yosys-specific attributes. Attributes annotate synthesis choices, mapping details, or tool-specific metadata. The file can be large and include comments and attributes that clutter manual inspection.
 
+<img width="826" height="435" alt="Image" src="https://github.com/user-attachments/assets/b2c1867c-882a-46ec-8bc4-35472972fa15" />
+
 To generate a cleaner, minimal netlist without synthesis attributes use:
 
 ```bash
 write_verilog -noattr good_mux_netlist.v
 gvim good_mux_netlist.v
 ```
+<img width="374" height="287" alt="Image" src="https://github.com/user-attachments/assets/f6f85034-0e8c-4550-8e00-0a98e23688b8" />
 
 `-noattr` removes Yosys attributes and many synthesis comments. Resulting file is smaller and easier to read. Use `-noattr` when you want a compact, human-readable netlist for review or for importing into other tools that do not expect attributes.
 
